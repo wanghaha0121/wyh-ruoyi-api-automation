@@ -178,7 +178,8 @@ def role_chain(user_client):
     )
 
 #存放dept相关的session
-@pytest.fixture()
+dept_chain = {}
+@pytest.fixture(scope="module")
 def create_dept(user_client):
     #新增
     dept_name = f"自动化部门_{random.randint(10000, 99999)}"
@@ -205,16 +206,27 @@ def create_dept(user_client):
     rows = resp_list.json()["data"]
     matched = [d for d in rows if d["deptName"] == dept_name]
     assert matched, f"新增成功但查不到 {dept_name}，接口返回：{rows}"
-    dept_id = matched[0]["deptId"]
-    yield dept_id
 
-    #删除
-    api_request(
-        session=user_client,
-        method='delete',
-        url=f'/system/dept/{dept_id}'
-    )
+    dept_chain["dept_id"] = matched[0]["deptId"]
+    dept_chain["dept_name"] = dept_name
+    dept_chain["parent_id"] = 101
+    dept_chain["user_id"] = None
+    yield dept_chain
 
-
-
-
+    #删除，有用户挂着的部门删不动
+    try:
+        if dept_chain.get("user_id"):
+            api_request(
+                session=user_client,
+                method="delete",
+                url=f"/system/user/{dept_chain['user_id']}"
+            )
+        r = api_request(
+            session=user_client,
+            method="delete",
+            url=f"/system/dept/{dept_chain['dept_id']}"
+        )
+        if r.json().get("code") != 200:
+            print(f"兜底异常清理：{r.json()}")
+    except Exception as e:
+        print(f"兜底清理异常：{e}")
